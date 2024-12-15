@@ -1,25 +1,56 @@
 import { useState } from 'react';
-import { useDropzone } from 'react-dropzone';
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import FileUploader from '@/components/FileUploader';
 import PricingCard from '@/components/PricingCard';
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [convertedFile, setConvertedFile] = useState<string | null>(null);
+  const [conversionId, setConversionId] = useState<string | null>(null);
 
   const handleConversion = async (file: File) => {
     setIsProcessing(true);
     try {
-      // In a real implementation, we would send the file to a backend service
-      // For now, we'll simulate processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      toast.success("File converted successfully!");
-      setConvertedFile("dummy-converted.pdf");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Please sign in to continue");
+        return;
+      }
+
+      // Upload file to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${session.user.id}/${crypto.randomUUID()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('conversions')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Create conversion record
+      const { data: conversion, error: conversionError } = await supabase
+        .from('conversions')
+        .insert({
+          user_id: session.user.id,
+          original_filename: file.name,
+          original_file_path: filePath,
+        })
+        .select()
+        .single();
+
+      if (conversionError) {
+        throw conversionError;
+      }
+
+      setConversionId(conversion.id);
+      toast.success("File uploaded successfully!");
     } catch (error) {
-      toast.error("Error converting file");
+      console.error('Conversion error:', error);
+      toast.error("Error uploading file");
     } finally {
       setIsProcessing(false);
     }
@@ -45,19 +76,11 @@ const Index = () => {
             />
           </Card>
 
-          <PricingCard />
+          <PricingCard 
+            conversionId={conversionId}
+            onPaymentInitiated={() => setIsProcessing(true)}
+          />
         </div>
-
-        {convertedFile && (
-          <div className="mt-8 text-center">
-            <Button 
-              onClick={() => window.open(convertedFile, '_blank')}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Download Converted File
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );
