@@ -13,70 +13,95 @@ serve(async (req) => {
   }
 
   try {
-    const { conversionId } = await req.json();
+    const { conversionId, paymentMethod = 'stripe' } = await req.json();
+    const authHeader = req.headers.get('Authorization')!;
+    const token = authHeader.replace('Bearer ', '');
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
 
-    // Get the session or user object
-    const authHeader = req.headers.get('Authorization')!;
-    const token = authHeader.replace('Bearer ', '');
     const { data: { user } } = await supabaseClient.auth.getUser(token);
+    if (!user) throw new Error('User not found');
 
-    if (!user) {
-      throw new Error('Not authenticated');
-    }
+    if (paymentMethod === 'paypal') {
+      // PayPal checkout flow
+      const response = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${btoa(Deno.env.get('PAYPAL_CLIENT_ID') + ':' + Deno.env.get('PAYPAL_SECRET_KEY'))}`,
+        },
+        body: JSON.stringify({
+          intent: 'CAPTURE',
+          purchase_units: [{
+            amount: {
+              currency_code: 'USD',
+              value: '1.99'
+            },
+            reference_id: conversionId
+          }]
+        })
+      });
 
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
-      apiVersion: '2023-10-16',
-    });
+      const paypalOrder = await response.json();
+      
+      // Update conversion record with PayPal order ID
+      await supabaseClient
+        .from('conversions')
+        .update({ payment_intent_id: paypalOrder.id })
+        .eq('id', conversionId);
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
+      return new Response(
+        JSON.stringify({ 
+          url: paypalOrder.links.find((link: any) => link.rel === 'approve').href,
+          provider: 'paypal'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else {
+      // Stripe checkout flow
+      const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+        apiVersion: '2023-10-16',
+      });
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{
           price_data: {
             currency: 'usd',
             product_data: {
               name: 'PDF Conversion',
-              description: 'Convert your document to PDF format',
             },
-            unit_amount: 199, // $1.99 in cents
+            unit_amount: 199,
           },
           quantity: 1,
+        }],
+        mode: 'payment',
+        success_url: `${req.headers.get('origin')}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${req.headers.get('origin')}/`,
+        metadata: {
+          conversionId,
         },
-      ],
-      mode: 'payment',
-      success_url: `${req.headers.get('origin')}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/`,
-      metadata: {
-        conversionId,
-        userId: user.id,
-      },
-    });
+      });
 
-    // Update the conversion record with the payment intent ID
-    await supabaseClient
-      .from('conversions')
-      .update({ payment_intent_id: session.payment_intent })
-      .eq('id', conversionId);
+      // Update conversion record with Stripe session ID
+      await supabaseClient
+        .from('conversions')
+        .update({ payment_intent_id: session.id })
+        .eq('id', conversionId);
 
-    return new Response(
-      JSON.stringify({ url: session.url }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
+      return new Response(
+        JSON.stringify({ url: session.url, provider: 'stripe' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   } catch (error) {
+    console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
