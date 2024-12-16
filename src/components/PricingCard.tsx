@@ -10,7 +10,7 @@ interface PricingCardProps {
 }
 
 const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => {
-  const handlePayment = async (paymentMethod: 'stripe' | 'paypal') => {
+  const handlePayment = async () => {
     try {
       if (!conversionId) {
         toast.error("Please upload a file first");
@@ -31,7 +31,7 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
         },
         body: JSON.stringify({ 
           conversionId,
-          paymentMethod 
+          paymentMethod: 'paypal'
         }),
       });
 
@@ -73,24 +73,15 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
         ))}
       </ul>
 
-      <div className="space-y-3">
-        <Button 
-          className="w-full bg-blue-600 hover:bg-blue-700"
-          onClick={() => handlePayment('stripe')}
-        >
-          Pay with Card
-        </Button>
-
-        <Button 
-          className="w-full bg-[#0070ba] hover:bg-[#003087]"
-          onClick={() => handlePayment('paypal')}
-        >
-          Pay with PayPal
-        </Button>
-      </div>
+      <Button 
+        className="w-full bg-[#0070ba] hover:bg-[#003087]"
+        onClick={handlePayment}
+      >
+        Pay with PayPal
+      </Button>
       
       <div className="mt-4 text-center text-sm text-gray-500">
-        Secure payment powered by Stripe & PayPal
+        Secure payment powered by PayPal
       </div>
     </Card>
   );
