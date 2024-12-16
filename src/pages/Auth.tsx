@@ -27,6 +27,8 @@ const AuthPage = () => {
           appearance={{ theme: ThemeSupa }}
           theme="light"
           providers={[]}
+          view="sign_up"
+          showLinks={true}
         />
       </div>
     </div>
