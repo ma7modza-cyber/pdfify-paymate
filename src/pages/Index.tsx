@@ -5,10 +5,12 @@ import FileUploader from '@/components/FileUploader';
 import PricingCard from '@/components/PricingCard';
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [conversionId, setConversionId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const handleConversion = async (file: File) => {
     setIsProcessing(true);
@@ -56,9 +58,20 @@ const Index = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <div className="container mx-auto px-4 py-12">
+        <div className="flex justify-end mb-8">
+          <Button variant="outline" onClick={handleLogout}>
+            Sign Out
+          </Button>
+        </div>
+        
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-blue-900 mb-4">
             Convert Excel & Word to PDF
