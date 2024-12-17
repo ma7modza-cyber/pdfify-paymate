@@ -59,32 +59,40 @@ serve(async (req) => {
     }
 
     console.log('Getting PayPal access token...');
+    
+    // Create base64 encoded credentials
+    const credentials = btoa(`${paypalClientId}:${paypalSecretKey}`);
+    console.log('Credentials encoded successfully');
 
-    // Get PayPal access token
+    // Get PayPal access token with detailed logging
     const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Accept-Language': 'en_US',
-        'Authorization': `Basic ${btoa(`${paypalClientId}:${paypalSecretKey}`)}`,
+        'Authorization': `Basic ${credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: 'grant_type=client_credentials'
     });
 
+    console.log('Token response status:', tokenResponse.status);
+    
     if (!tokenResponse.ok) {
       const tokenError = await tokenResponse.text();
       console.error('PayPal token error response:', tokenError);
-      throw new Error('Failed to get PayPal access token');
+      console.error('PayPal token response headers:', Object.fromEntries(tokenResponse.headers.entries()));
+      throw new Error(`Failed to get PayPal access token: ${tokenError}`);
     }
 
     const tokenData = await tokenResponse.json();
-    console.log('PayPal access token obtained successfully');
-
+    
     if (!tokenData.access_token) {
-      console.error('No access token in PayPal response:', tokenData);
-      throw new Error('Invalid PayPal token response');
+      console.error('Invalid PayPal token response:', tokenData);
+      throw new Error('No access token received from PayPal');
     }
+
+    console.log('PayPal access token obtained successfully');
 
     // Create PayPal order
     console.log('Creating PayPal order...');
