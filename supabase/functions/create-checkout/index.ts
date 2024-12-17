@@ -13,7 +13,6 @@ serve(async (req) => {
   }
 
   try {
-    // Parse request body
     const { conversionId } = await req.json();
     console.log('Processing checkout for conversion:', conversionId);
 
@@ -23,8 +22,6 @@ serve(async (req) => {
 
     // Get auth token from request header
     const authHeader = req.headers.get('Authorization');
-    console.log('Auth header present:', !!authHeader);
-    
     if (!authHeader) {
       throw new Error('No authorization header');
     }
@@ -42,66 +39,50 @@ serve(async (req) => {
 
     // Verify user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
-    console.log('User verification:', user ? 'successful' : 'failed');
-    
     if (userError || !user) {
-      console.error('User verification failed:', userError);
       throw new Error('User not found');
     }
 
     // Get PayPal credentials
     const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
-
+    
     if (!paypalClientId || !paypalSecretKey) {
-      console.error('PayPal credentials missing');
       throw new Error('PayPal credentials not configured');
     }
 
-    console.log('Getting PayPal access token...');
-    
-    // Create base64 encoded credentials
-    const credentials = btoa(`${paypalClientId}:${paypalSecretKey}`);
-    console.log('Credentials encoded successfully');
-
-    // Get PayPal access token with detailed logging
+    // Get PayPal access token
     const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
-        'Accept-Language': 'en_US',
-        'Authorization': `Basic ${credentials}`,
+        'Authorization': `Basic ${btoa(`${paypalClientId}:${paypalSecretKey}`)}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: 'grant_type=client_credentials'
     });
 
-    console.log('Token response status:', tokenResponse.status);
-    
     if (!tokenResponse.ok) {
-      const tokenError = await tokenResponse.text();
-      console.error('PayPal token error response:', tokenError);
-      console.error('PayPal token response headers:', Object.fromEntries(tokenResponse.headers.entries()));
-      throw new Error(`Failed to get PayPal access token: ${tokenError}`);
+      const errorText = await tokenResponse.text();
+      console.error('PayPal token error:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        body: errorText
+      });
+      throw new Error(`PayPal authentication failed: ${tokenResponse.status}`);
     }
 
-    const tokenData = await tokenResponse.json();
-    
-    if (!tokenData.access_token) {
-      console.error('Invalid PayPal token response:', tokenData);
-      throw new Error('No access token received from PayPal');
+    const { access_token } = await tokenResponse.json();
+    if (!access_token) {
+      throw new Error('Invalid PayPal token response');
     }
-
-    console.log('PayPal access token obtained successfully');
 
     // Create PayPal order
-    console.log('Creating PayPal order...');
     const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${tokenData.access_token}`,
-        'Prefer': 'return=representation'
+        'Authorization': `Bearer ${access_token}`,
+        'PayPal-Request-Id': crypto.randomUUID(),
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -110,6 +91,7 @@ serve(async (req) => {
             currency_code: 'USD',
             value: '1.99'
           },
+          description: 'PDF Conversion Service',
           reference_id: conversionId
         }],
         application_context: {
@@ -122,11 +104,10 @@ serve(async (req) => {
     });
 
     const orderData = await orderResponse.json();
-    console.log('PayPal order response:', orderData);
-
+    
     if (!orderResponse.ok) {
-      console.error('PayPal API error:', orderData);
-      throw new Error(orderData.message || 'Failed to create PayPal order');
+      console.error('PayPal order error:', orderData);
+      throw new Error('Failed to create PayPal order');
     }
 
     // Update conversion record with PayPal order ID
@@ -137,7 +118,6 @@ serve(async (req) => {
       .eq('user_id', user.id);
 
     if (updateError) {
-      console.error('Failed to update conversion record:', updateError);
       throw new Error('Failed to update conversion record');
     }
 
@@ -153,12 +133,12 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in create-checkout function:', error);
+    console.error('Checkout error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 400 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
       }
     );
   }
