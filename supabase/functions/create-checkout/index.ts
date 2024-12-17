@@ -15,7 +15,7 @@ serve(async (req) => {
   try {
     // Parse request body
     const { conversionId } = await req.json();
-    console.log('Received request for conversionId:', conversionId);
+    console.log('Processing checkout for conversion:', conversionId);
 
     if (!conversionId) {
       throw new Error('Conversion ID is required');
@@ -54,6 +54,7 @@ serve(async (req) => {
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
 
     if (!paypalClientId || !paypalSecretKey) {
+      console.error('PayPal credentials missing');
       throw new Error('PayPal credentials not configured');
     }
 
@@ -91,7 +92,8 @@ serve(async (req) => {
     const { error: updateError } = await supabaseClient
       .from('conversions')
       .update({ payment_intent_id: paypalOrder.id })
-      .eq('id', conversionId);
+      .eq('id', conversionId)
+      .eq('user_id', user.id);
 
     if (updateError) {
       console.error('Failed to update conversion record:', updateError);

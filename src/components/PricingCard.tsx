@@ -18,18 +18,13 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
       }
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      if (!session?.access_token) {
         toast.error("Please sign in to continue");
         return;
       }
 
-      // Get fresh access token
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Authentication error");
-        return;
-      }
-
+      console.log('Initiating payment for conversion:', conversionId);
+      
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { conversionId },
         headers: {
@@ -39,15 +34,17 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
 
       if (error) {
         console.error('Payment error:', error);
-        toast.error(error.message || "Failed to initiate payment");
+        toast.error("Failed to initiate payment. Please try again.");
         return;
       }
 
       if (!data?.url) {
+        console.error('No payment URL received');
         toast.error("Failed to get payment URL");
         return;
       }
 
+      console.log('Payment URL received:', data.url);
       onPaymentInitiated?.();
       window.location.href = data.url;
       
