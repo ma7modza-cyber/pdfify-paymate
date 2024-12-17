@@ -51,37 +51,46 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    // Get PayPal access token
+    // Get PayPal access token with proper credentials encoding
+    const credentials = `${paypalClientId}:${paypalSecretKey}`;
+    const base64Credentials = btoa(credentials);
+    
+    console.log('Requesting PayPal access token...');
     const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${btoa(`${paypalClientId}:${paypalSecretKey}`)}`,
+        'Authorization': `Basic ${base64Credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
       body: 'grant_type=client_credentials'
     });
 
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
+      const errorBody = await tokenResponse.text();
       console.error('PayPal token error:', {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
-        body: errorText
+        headers: Object.fromEntries(tokenResponse.headers),
+        body: errorBody
       });
-      throw new Error(`PayPal authentication failed: ${tokenResponse.status}`);
+      throw new Error(`PayPal authentication failed: ${tokenResponse.status} - ${errorBody}`);
     }
 
-    const { access_token } = await tokenResponse.json();
-    if (!access_token) {
+    const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) {
+      console.error('Invalid PayPal token response:', tokenData);
       throw new Error('Invalid PayPal token response');
     }
 
-    // Create PayPal order
+    console.log('Successfully obtained PayPal access token');
+
+    // Create PayPal order with the valid token
     const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${access_token}`,
+        'Authorization': `Bearer ${tokenData.access_token}`,
         'PayPal-Request-Id': crypto.randomUUID(),
       },
       body: JSON.stringify({
@@ -107,7 +116,7 @@ serve(async (req) => {
     
     if (!orderResponse.ok) {
       console.error('PayPal order error:', orderData);
-      throw new Error('Failed to create PayPal order');
+      throw new Error(`Failed to create PayPal order: ${orderResponse.status} - ${JSON.stringify(orderData)}`);
     }
 
     // Update conversion record with PayPal order ID
@@ -127,6 +136,8 @@ serve(async (req) => {
       throw new Error('PayPal approval URL not found');
     }
 
+    console.log('Successfully created PayPal order:', orderData.id);
+    
     return new Response(
       JSON.stringify({ url: approvalUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
