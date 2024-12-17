@@ -87,6 +87,7 @@ serve(async (req) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${access_token}`,
+        'Prefer': 'return=representation'
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -99,7 +100,9 @@ serve(async (req) => {
         }],
         application_context: {
           return_url: `${req.headers.get('origin')}/success`,
-          cancel_url: `${req.headers.get('origin')}/cancel`
+          cancel_url: `${req.headers.get('origin')}/cancel`,
+          user_action: 'PAY_NOW',
+          brand_name: 'PDF Converter'
         }
       })
     });
