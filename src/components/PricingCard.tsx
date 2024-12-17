@@ -23,8 +23,18 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
         return;
       }
 
+      // Get fresh access token
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Authentication error");
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { conversionId }
+        body: { conversionId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
       if (error) {

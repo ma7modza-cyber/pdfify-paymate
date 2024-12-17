@@ -23,6 +23,8 @@ serve(async (req) => {
 
     // Get auth token from request header
     const authHeader = req.headers.get('Authorization');
+    console.log('Auth header present:', !!authHeader);
+    
     if (!authHeader) {
       throw new Error('No authorization header');
     }
@@ -40,6 +42,8 @@ serve(async (req) => {
 
     // Verify user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    console.log('User verification:', user ? 'successful' : 'failed');
+    
     if (userError || !user) {
       console.error('User verification failed:', userError);
       throw new Error('User not found');
@@ -75,11 +79,12 @@ serve(async (req) => {
     });
 
     const paypalOrder = await response.json();
+    console.log('PayPal API response status:', response.status);
     console.log('PayPal order response:', paypalOrder);
 
-    if (paypalOrder.error) {
-      console.error('PayPal order creation failed:', paypalOrder.error);
-      throw new Error(paypalOrder.error.message);
+    if (!response.ok) {
+      console.error('PayPal API error:', paypalOrder);
+      throw new Error(paypalOrder.message || 'Failed to create PayPal order');
     }
 
     // Update conversion record with PayPal order ID
