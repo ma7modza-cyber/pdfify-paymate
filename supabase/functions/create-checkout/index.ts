@@ -60,12 +60,33 @@ serve(async (req) => {
 
     console.log('Creating PayPal order...');
 
-    // Create PayPal order
-    const response = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
+    // Get PayPal access token first
+    const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Language': 'en_US',
+        'Authorization': `Basic ${btoa(`${paypalClientId}:${paypalSecretKey}`)}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials'
+    });
+
+    if (!tokenResponse.ok) {
+      const tokenError = await tokenResponse.text();
+      console.error('PayPal token error:', tokenError);
+      throw new Error('Failed to get PayPal access token');
+    }
+
+    const { access_token } = await tokenResponse.json();
+    console.log('PayPal access token obtained');
+
+    // Create PayPal order with the access token
+    const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${btoa(`${paypalClientId}:${paypalSecretKey}`)}`,
+        'Authorization': `Bearer ${access_token}`,
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -75,23 +96,26 @@ serve(async (req) => {
             value: '1.99'
           },
           reference_id: conversionId
-        }]
+        }],
+        application_context: {
+          return_url: `${req.headers.get('origin')}/success`,
+          cancel_url: `${req.headers.get('origin')}/cancel`
+        }
       })
     });
 
-    const paypalOrder = await response.json();
-    console.log('PayPal API response status:', response.status);
-    console.log('PayPal order response:', paypalOrder);
+    const orderData = await orderResponse.json();
+    console.log('PayPal order response:', orderData);
 
-    if (!response.ok) {
-      console.error('PayPal API error:', paypalOrder);
-      throw new Error(paypalOrder.message || 'Failed to create PayPal order');
+    if (!orderResponse.ok) {
+      console.error('PayPal API error:', orderData);
+      throw new Error(orderData.message || 'Failed to create PayPal order');
     }
 
     // Update conversion record with PayPal order ID
     const { error: updateError } = await supabaseClient
       .from('conversions')
-      .update({ payment_intent_id: paypalOrder.id })
+      .update({ payment_intent_id: orderData.id })
       .eq('id', conversionId)
       .eq('user_id', user.id);
 
@@ -101,7 +125,7 @@ serve(async (req) => {
     }
 
     // Return the PayPal approval URL
-    const approvalUrl = paypalOrder.links.find((link: any) => link.rel === 'approve')?.href;
+    const approvalUrl = orderData.links.find((link: any) => link.rel === 'approve')?.href;
     if (!approvalUrl) {
       throw new Error('PayPal approval URL not found');
     }

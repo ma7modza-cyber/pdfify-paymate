@@ -34,13 +34,13 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
 
       if (error) {
         console.error('Payment error:', error);
-        toast.error("Failed to initiate payment. Please try again.");
+        toast.error(error.message || "Failed to initiate payment. Please try again.");
         return;
       }
 
       if (!data?.url) {
         console.error('No payment URL received');
-        toast.error("Failed to get payment URL");
+        toast.error("Failed to get payment URL. Please try again.");
         return;
       }
 
@@ -50,7 +50,7 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
       
     } catch (error) {
       console.error('Payment error:', error);
-      toast.error("Failed to initiate payment. Please try again.");
+      toast.error("An unexpected error occurred. Please try again.");
     }
   };
 
