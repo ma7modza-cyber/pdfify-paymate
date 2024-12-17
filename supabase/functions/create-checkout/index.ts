@@ -13,26 +13,54 @@ serve(async (req) => {
   }
 
   try {
+    // Parse request body
     const { conversionId } = await req.json();
-    const authHeader = req.headers.get('Authorization')!;
+    console.log('Received request for conversionId:', conversionId);
+
+    if (!conversionId) {
+      throw new Error('Conversion ID is required');
+    }
+
+    // Get auth token from request header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
     const token = authHeader.replace('Bearer ', '');
 
     // Initialize Supabase client
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Missing Supabase configuration');
+    }
+
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
     // Verify user
-    const { data: { user } } = await supabaseClient.auth.getUser(token);
-    if (!user) throw new Error('User not found');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError || !user) {
+      console.error('User verification failed:', userError);
+      throw new Error('User not found');
+    }
+
+    // Get PayPal credentials
+    const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
+    const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
+
+    if (!paypalClientId || !paypalSecretKey) {
+      throw new Error('PayPal credentials not configured');
+    }
+
+    console.log('Creating PayPal order...');
 
     // Create PayPal order
     const response = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${btoa(Deno.env.get('PAYPAL_CLIENT_ID') + ':' + Deno.env.get('PAYPAL_SECRET_KEY'))}`,
+        Authorization: `Basic ${btoa(`${paypalClientId}:${paypalSecretKey}`)}`,
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -47,9 +75,10 @@ serve(async (req) => {
     });
 
     const paypalOrder = await response.json();
-    console.log('PayPal order created:', paypalOrder);
+    console.log('PayPal order response:', paypalOrder);
 
     if (paypalOrder.error) {
+      console.error('PayPal order creation failed:', paypalOrder.error);
       throw new Error(paypalOrder.error.message);
     }
 
@@ -60,21 +89,29 @@ serve(async (req) => {
       .eq('id', conversionId);
 
     if (updateError) {
+      console.error('Failed to update conversion record:', updateError);
       throw new Error('Failed to update conversion record');
     }
 
     // Return the PayPal approval URL
-    const approvalUrl = paypalOrder.links.find((link: any) => link.rel === 'approve').href;
+    const approvalUrl = paypalOrder.links.find((link: any) => link.rel === 'approve')?.href;
+    if (!approvalUrl) {
+      throw new Error('PayPal approval URL not found');
+    }
+
     return new Response(
       JSON.stringify({ url: approvalUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error in create-checkout function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+        status: 400 
+      }
     );
   }
 });

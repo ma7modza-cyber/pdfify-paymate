@@ -28,16 +28,22 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
       });
 
       if (error) {
-        throw new Error(error.message);
+        console.error('Payment error:', error);
+        toast.error(error.message || "Failed to initiate payment");
+        return;
       }
 
-      if (data?.url) {
-        onPaymentInitiated?.();
-        window.location.href = data.url;
+      if (!data?.url) {
+        toast.error("Failed to get payment URL");
+        return;
       }
+
+      onPaymentInitiated?.();
+      window.location.href = data.url;
+      
     } catch (error) {
       console.error('Payment error:', error);
-      toast.error("Failed to initiate payment");
+      toast.error("Failed to initiate payment. Please try again.");
     }
   };
 
