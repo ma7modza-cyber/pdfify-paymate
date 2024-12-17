@@ -23,27 +23,17 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
         return;
       }
 
-      const response = await fetch('/functions/v1/create-checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ 
-          conversionId,
-          paymentMethod: 'paypal'
-        }),
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { conversionId }
       });
 
-      const { url, error } = await response.json();
-      
       if (error) {
-        throw new Error(error);
+        throw new Error(error.message);
       }
 
-      if (url) {
+      if (data?.url) {
         onPaymentInitiated?.();
-        window.location.href = url;
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Payment error:', error);
