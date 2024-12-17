@@ -1,6 +1,7 @@
 import { useDropzone } from 'react-dropzone';
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Loader2, FileText } from "lucide-react";
+import { toast } from "sonner";
 
 interface FileUploaderProps {
   onFileSelect: (file: File) => void;
@@ -8,14 +9,21 @@ interface FileUploaderProps {
 }
 
 const FileUploader = ({ onFileSelect, isProcessing }: FileUploaderProps) => {
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, acceptedFiles } = useDropzone({
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
     },
     maxFiles: 1,
-    onDrop: files => files[0] && onFileSelect(files[0])
+    onDrop: files => {
+      if (files[0]) {
+        onFileSelect(files[0]);
+        toast.success("File uploaded successfully!");
+      }
+    }
   });
+
+  const currentFile = acceptedFiles[0];
 
   return (
     <div
@@ -31,6 +39,16 @@ const FileUploader = ({ onFileSelect, isProcessing }: FileUploaderProps) => {
         <div className="flex flex-col items-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
           <p className="mt-2 text-gray-600">Converting your file...</p>
+        </div>
+      ) : currentFile ? (
+        <div className="flex flex-col items-center">
+          <FileText className="h-12 w-12 text-blue-500 mb-4" />
+          <p className="text-lg font-medium text-gray-900">
+            {currentFile.name}
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            Click or drop to replace file
+          </p>
         </div>
       ) : (
         <div>
