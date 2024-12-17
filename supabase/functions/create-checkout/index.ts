@@ -52,17 +52,19 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    // Create proper Base64 encoded credentials using TextEncoder
-    const encoder = new TextEncoder();
+    // Create Base64 encoded credentials for PayPal
     const credentials = `${paypalClientId}:${paypalSecretKey}`;
-    const encodedCredentials = btoa(String.fromCharCode(...encoder.encode(credentials)));
+    const encodedCredentials = btoa(credentials);
     
     console.log('Requesting PayPal access token...');
+    
+    // Get PayPal access token
     const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${encodedCredentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
       body: 'grant_type=client_credentials'
     });
