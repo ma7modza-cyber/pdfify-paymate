@@ -48,36 +48,35 @@ serve(async (req) => {
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
     
     if (!paypalClientId || !paypalSecretKey) {
+      console.error('PayPal credentials missing');
       throw new Error('PayPal credentials not configured');
     }
 
-    // Get PayPal access token with proper credentials encoding
+    // Create proper Base64 encoded credentials using TextEncoder
+    const encoder = new TextEncoder();
     const credentials = `${paypalClientId}:${paypalSecretKey}`;
-    const base64Credentials = btoa(credentials);
+    const encodedCredentials = btoa(String.fromCharCode(...encoder.encode(credentials)));
     
     console.log('Requesting PayPal access token...');
     const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${base64Credentials}`,
+        'Authorization': `Basic ${encodedCredentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
       },
       body: 'grant_type=client_credentials'
     });
 
+    const tokenData = await tokenResponse.json();
+
     if (!tokenResponse.ok) {
-      const errorBody = await tokenResponse.text();
       console.error('PayPal token error:', {
         status: tokenResponse.status,
-        statusText: tokenResponse.statusText,
-        headers: Object.fromEntries(tokenResponse.headers),
-        body: errorBody
+        body: tokenData
       });
-      throw new Error(`PayPal authentication failed: ${tokenResponse.status} - ${errorBody}`);
+      throw new Error(`PayPal authentication failed: ${tokenResponse.status} - ${JSON.stringify(tokenData)}`);
     }
 
-    const tokenData = await tokenResponse.json();
     if (!tokenData.access_token) {
       console.error('Invalid PayPal token response:', tokenData);
       throw new Error('Invalid PayPal token response');
@@ -85,7 +84,7 @@ serve(async (req) => {
 
     console.log('Successfully obtained PayPal access token');
 
-    // Create PayPal order with the valid token
+    // Create PayPal order
     const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
