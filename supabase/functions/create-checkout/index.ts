@@ -58,9 +58,9 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    console.log('Creating PayPal order...');
+    console.log('Getting PayPal access token...');
 
-    // Get PayPal access token first
+    // Get PayPal access token
     const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
@@ -74,19 +74,25 @@ serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const tokenError = await tokenResponse.text();
-      console.error('PayPal token error:', tokenError);
+      console.error('PayPal token error response:', tokenError);
       throw new Error('Failed to get PayPal access token');
     }
 
-    const { access_token } = await tokenResponse.json();
-    console.log('PayPal access token obtained');
+    const tokenData = await tokenResponse.json();
+    console.log('PayPal access token obtained successfully');
 
-    // Create PayPal order with the access token
+    if (!tokenData.access_token) {
+      console.error('No access token in PayPal response:', tokenData);
+      throw new Error('Invalid PayPal token response');
+    }
+
+    // Create PayPal order
+    console.log('Creating PayPal order...');
     const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${access_token}`,
+        'Authorization': `Bearer ${tokenData.access_token}`,
         'Prefer': 'return=representation'
       },
       body: JSON.stringify({
