@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useState } from "react";
 
 interface PricingCardProps {
   conversionId?: string;
@@ -10,8 +11,12 @@ interface PricingCardProps {
 }
 
 const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => {
+  const [isLoading, setIsLoading] = useState(false);
+
   const handlePayment = async () => {
     try {
+      setIsLoading(true);
+
       if (!conversionId) {
         toast.error("Please upload a file first");
         return;
@@ -34,13 +39,13 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
 
       if (error) {
         console.error('Payment error:', error);
-        toast.error(error.message || "Failed to initiate payment. Please try again.");
+        toast.error("Payment initialization failed. Please try again later.");
         return;
       }
 
       if (!data?.url) {
         console.error('No payment URL received');
-        toast.error("Failed to get payment URL. Please try again.");
+        toast.error("Could not start payment process. Please try again.");
         return;
       }
 
@@ -51,6 +56,8 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
     } catch (error) {
       console.error('Payment error:', error);
       toast.error("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -79,8 +86,9 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
       <Button 
         className="w-full bg-[#0070ba] hover:bg-[#003087]"
         onClick={handlePayment}
+        disabled={isLoading}
       >
-        Pay with PayPal
+        {isLoading ? "Processing..." : "Pay with PayPal"}
       </Button>
       
       <div className="mt-4 text-center text-sm text-gray-500">
