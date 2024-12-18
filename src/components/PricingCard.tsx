@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface PricingCardProps {
   conversionId?: string;
@@ -12,6 +12,20 @@ interface PricingCardProps {
 
 const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    // Check for payment success in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentSuccess = urlParams.get('payment_success');
+    
+    if (paymentSuccess === 'true') {
+      toast.success('Payment successful!');
+      // Remove the query parameters
+      window.history.replaceState({}, '', window.location.pathname);
+      // Reload the page to refresh the conversion status
+      window.location.reload();
+    }
+  }, []);
 
   const handlePayment = async () => {
     try {
