@@ -86,6 +86,9 @@ serve(async (req) => {
 
     console.log('Successfully obtained PayPal access token');
 
+    // Get the origin from the request, defaulting to localhost:8080 if not provided
+    const origin = req.headers.get('origin') || 'http://localhost:8080';
+    
     // Create PayPal order
     const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
@@ -105,8 +108,8 @@ serve(async (req) => {
           reference_id: conversionId
         }],
         application_context: {
-          return_url: `${req.headers.get('origin')}/success`,
-          cancel_url: `${req.headers.get('origin')}/cancel`,
+          return_url: `${origin}/?payment_success=true`,
+          cancel_url: `${origin}/?payment_cancelled=true`,
           user_action: 'PAY_NOW',
           brand_name: 'PDF Converter'
         }
