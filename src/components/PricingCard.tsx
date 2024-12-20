@@ -1,9 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Check } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { useState } from "react";
+import { usePayment } from "@/hooks/use-payment";
 
 interface PricingCardProps {
   conversionId?: string;
@@ -11,54 +9,11 @@ interface PricingCardProps {
 }
 
 const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => {
-  const [isLoading, setIsLoading] = useState(false);
+  const { isLoading, handlePayment } = usePayment();
 
-  const handlePayment = async () => {
-    try {
-      setIsLoading(true);
-
-      if (!conversionId) {
-        toast.error("Please upload a file first");
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        toast.error("Please sign in to continue");
-        return;
-      }
-
-      console.log('Initiating payment for conversion:', conversionId);
-      
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { conversionId },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
-      });
-
-      if (error) {
-        console.error('Payment error:', error);
-        toast.error("Payment initialization failed. Please try again later.");
-        return;
-      }
-
-      if (!data?.url) {
-        console.error('No payment URL received');
-        toast.error("Could not start payment process. Please try again.");
-        return;
-      }
-
-      console.log('Payment URL received:', data.url);
-      onPaymentInitiated?.();
-      window.location.href = data.url;
-      
-    } catch (error) {
-      console.error('Payment error:', error);
-      toast.error("An unexpected error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+  const handlePaymentClick = async () => {
+    await handlePayment(conversionId);
+    onPaymentInitiated?.();
   };
 
   return (
@@ -85,7 +40,7 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
 
       <Button 
         className="w-full bg-[#0070ba] hover:bg-[#003087]"
-        onClick={handlePayment}
+        onClick={handlePaymentClick}
         disabled={isLoading}
       >
         {isLoading ? "Processing..." : "Pay with PayPal"}

@@ -12,46 +12,59 @@ import { toast } from "sonner";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+const useAuthRedirect = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    // Check URL parameters for payment status
+    const handleAuthRedirect = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && location.pathname === '/auth') {
+        navigate('/');
+      }
+    };
+
+    handleAuthRedirect();
+  }, [navigate, location]);
+};
+
+const usePaymentStatus = () => {
+  useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const paymentSuccess = urlParams.get('payment_success');
     const paymentCancelled = urlParams.get('payment_cancelled');
     
     if (paymentSuccess === 'true') {
       toast.success('Payment successful! Your conversion will begin shortly.');
-      // Remove the query parameters and reload the page
       window.history.replaceState({}, '', window.location.pathname);
       window.location.reload();
     } else if (paymentCancelled === 'true') {
       toast.error('Payment was cancelled.');
-      // Remove the query parameters but don't reload
       window.history.replaceState({}, '', window.location.pathname);
     }
+  }, []);
+};
 
-    // Handle email confirmation
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=signup') || hash.includes('type=recovery') || hash.includes('type=magiclink')) {
-      console.log("Detected auth redirect with hash:", hash);
-      // The email confirmation will be handled automatically by Supabase
-      toast.success('Processing authentication...');
-    }
+const useAuthState = () => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleEmailConfirmation = () => {
+      const hash = window.location.hash;
+      if (hash && (hash.includes('type=signup') || hash.includes('type=recovery') || hash.includes('type=magiclink'))) {
+        console.log("Detected auth redirect with hash:", hash);
+        toast.success('Processing authentication...');
+      }
+    };
+
+    handleEmailConfirmation();
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log("Current session:", session);
       setSession(session);
       setLoading(false);
-      
-      // If user is already signed in and on auth page, redirect to home
-      if (session && location.pathname === '/auth') {
-        navigate('/');
-      }
     });
 
     const {
@@ -63,7 +76,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       if (_event === 'SIGNED_IN') {
         toast.success('Successfully signed in!');
         navigate('/');
-        // Add a small delay before reloading to ensure the toast is shown
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -74,7 +86,15 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, location]);
+  }, [navigate]);
+
+  return { session, loading };
+};
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, loading } = useAuthState();
+  useAuthRedirect();
+  usePaymentStatus();
 
   if (loading) {
     return <div>Loading...</div>;
