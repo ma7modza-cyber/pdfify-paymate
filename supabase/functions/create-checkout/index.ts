@@ -37,10 +37,22 @@ serve(async (req) => {
 
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
-    // Verify user
+    // Verify user and get conversion details
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError || !user) {
       throw new Error('User not found');
+    }
+
+    // Get conversion details
+    const { data: conversion, error: conversionError } = await supabaseClient
+      .from('conversions')
+      .select('*')
+      .eq('id', conversionId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (conversionError || !conversion) {
+      throw new Error('Conversion not found');
     }
 
     // Get PayPal credentials
@@ -71,17 +83,9 @@ serve(async (req) => {
 
     const tokenData = await tokenResponse.json();
 
-    if (!tokenResponse.ok) {
-      console.error('PayPal token error:', {
-        status: tokenResponse.status,
-        body: tokenData
-      });
-      throw new Error(`PayPal authentication failed: ${tokenResponse.status} - ${JSON.stringify(tokenData)}`);
-    }
-
-    if (!tokenData.access_token) {
-      console.error('Invalid PayPal token response:', tokenData);
-      throw new Error('Invalid PayPal token response');
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      console.error('PayPal token error:', tokenData);
+      throw new Error('PayPal authentication failed');
     }
 
     console.log('Successfully obtained PayPal access token');
@@ -108,7 +112,7 @@ serve(async (req) => {
           reference_id: conversionId
         }],
         application_context: {
-          return_url: `${origin}/?payment_success=true`,
+          return_url: `${origin}/?payment_success=true&conversion_id=${conversionId}`,
           cancel_url: `${origin}/?payment_cancelled=true`,
           user_action: 'PAY_NOW',
           brand_name: 'PDF Converter'
@@ -120,13 +124,16 @@ serve(async (req) => {
     
     if (!orderResponse.ok) {
       console.error('PayPal order error:', orderData);
-      throw new Error(`Failed to create PayPal order: ${orderResponse.status} - ${JSON.stringify(orderData)}`);
+      throw new Error('Failed to create PayPal order');
     }
 
     // Update conversion record with PayPal order ID
     const { error: updateError } = await supabaseClient
       .from('conversions')
-      .update({ payment_intent_id: orderData.id })
+      .update({ 
+        payment_intent_id: orderData.id,
+        payment_status: 'pending'
+      })
       .eq('id', conversionId)
       .eq('user_id', user.id);
 

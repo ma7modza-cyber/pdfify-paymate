@@ -36,12 +36,47 @@ const usePaymentStatus = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const paymentSuccess = urlParams.get('payment_success');
     const paymentCancelled = urlParams.get('payment_cancelled');
+    const conversionId = urlParams.get('conversion_id');
     
-    if (paymentSuccess === 'true') {
-      console.log("Payment successful, redirecting to home");
-      toast.success('Payment successful! Your conversion will begin shortly.');
+    const handleSuccessfulPayment = async (conversionId: string) => {
+      try {
+        console.log("Processing conversion after successful payment:", conversionId);
+        
+        // Update payment status
+        const { error: updateError } = await supabase
+          .from('conversions')
+          .update({ payment_status: 'paid' })
+          .eq('id', conversionId);
+
+        if (updateError) {
+          console.error('Failed to update payment status:', updateError);
+          toast.error('Failed to process payment. Please contact support.');
+          return;
+        }
+
+        // Start conversion process
+        const { error: conversionError } = await supabase.functions.invoke('process-conversion', {
+          body: { conversionId }
+        });
+
+        if (conversionError) {
+          console.error('Conversion error:', conversionError);
+          toast.error('Failed to start conversion. Please try again.');
+          return;
+        }
+
+        toast.success('Payment successful! Your conversion will begin shortly.');
+      } catch (error) {
+        console.error('Payment processing error:', error);
+        toast.error('An error occurred while processing your payment.');
+      }
+    };
+    
+    if (paymentSuccess === 'true' && conversionId) {
+      console.log("Payment successful, processing conversion");
+      handleSuccessfulPayment(conversionId);
       window.history.replaceState({}, '', window.location.pathname);
-      navigate('/');
+      navigate('/', { replace: true });
     } else if (paymentCancelled === 'true') {
       console.log("Payment cancelled, showing error toast");
       toast.error('Payment was cancelled.');
