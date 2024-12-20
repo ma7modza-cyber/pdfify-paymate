@@ -20,6 +20,7 @@ const useAuthRedirect = () => {
     const handleAuthRedirect = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session && location.pathname === '/auth') {
+        console.log("Redirecting authenticated user from /auth to /");
         navigate('/');
       }
     };
@@ -29,20 +30,24 @@ const useAuthRedirect = () => {
 };
 
 const usePaymentStatus = () => {
+  const navigate = useNavigate();
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const paymentSuccess = urlParams.get('payment_success');
     const paymentCancelled = urlParams.get('payment_cancelled');
     
     if (paymentSuccess === 'true') {
+      console.log("Payment successful, redirecting to home");
       toast.success('Payment successful! Your conversion will begin shortly.');
       window.history.replaceState({}, '', window.location.pathname);
-      window.location.reload();
+      navigate('/');
     } else if (paymentCancelled === 'true') {
+      console.log("Payment cancelled, showing error toast");
       toast.error('Payment was cancelled.');
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, []);
+  }, [navigate]);
 };
 
 const useAuthState = () => {
@@ -74,13 +79,12 @@ const useAuthState = () => {
       setSession(session);
       
       if (_event === 'SIGNED_IN') {
+        console.log("User signed in, redirecting to home");
         toast.success('Successfully signed in!');
-        navigate('/');
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        navigate('/', { replace: true });
       } else if (_event === 'SIGNED_OUT') {
-        navigate('/auth');
+        console.log("User signed out, redirecting to auth");
+        navigate('/auth', { replace: true });
         toast.success('Successfully signed out!');
       }
     });
@@ -101,6 +105,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!session) {
+    console.log("No session found, redirecting to auth");
     return <Navigate to="/auth" />;
   }
 
