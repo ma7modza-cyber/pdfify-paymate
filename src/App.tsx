@@ -19,15 +19,20 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
 
   useEffect(() => {
-    // Check URL parameters for payment success
+    // Check URL parameters for payment status
     const urlParams = new URLSearchParams(window.location.search);
     const paymentSuccess = urlParams.get('payment_success');
+    const paymentCancelled = urlParams.get('payment_cancelled');
     
     if (paymentSuccess === 'true') {
-      toast.success('Payment successful!');
+      toast.success('Payment successful! Your conversion will begin shortly.');
       // Remove the query parameters and reload the page
       window.history.replaceState({}, '', window.location.pathname);
       window.location.reload();
+    } else if (paymentCancelled === 'true') {
+      toast.error('Payment was cancelled.');
+      // Remove the query parameters but don't reload
+      window.history.replaceState({}, '', window.location.pathname);
     }
 
     // Handle email confirmation
