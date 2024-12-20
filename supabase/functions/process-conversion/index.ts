@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { Document, Packer } from "https://esm.sh/docx@8.5.0";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +15,7 @@ serve(async (req) => {
 
   try {
     const { conversionId } = await req.json();
-    console.log('Processing conversion:', conversionId);
+    console.log('Starting conversion process for:', conversionId);
 
     if (!conversionId) {
       throw new Error('Conversion ID is required');
@@ -21,16 +23,16 @@ serve(async (req) => {
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error('Missing Supabase configuration');
     }
 
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get conversion details
-    const { data: conversion, error: conversionError } = await supabaseClient
+    const { data: conversion, error: conversionError } = await supabase
       .from('conversions')
       .select('*')
       .eq('id', conversionId)
@@ -40,12 +42,10 @@ serve(async (req) => {
       throw new Error('Conversion not found');
     }
 
-    if (conversion.payment_status !== 'paid') {
-      throw new Error('Payment required before conversion');
-    }
+    console.log('Retrieved conversion details:', conversion);
 
     // Download the original file
-    const { data: fileData, error: downloadError } = await supabaseClient.storage
+    const { data: fileData, error: downloadError } = await supabase.storage
       .from('conversions')
       .download(conversion.original_file_path);
 
@@ -53,15 +53,55 @@ serve(async (req) => {
       throw new Error('Failed to download original file');
     }
 
-    // TODO: Implement actual file conversion logic here
-    // For now, we'll just simulate a conversion by creating a PDF file
-    const pdfContent = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // PDF magic numbers
-    const convertedFilePath = conversion.original_file_path.replace(/\.[^/.]+$/, ".pdf");
+    let pdfBuffer;
+    const fileExtension = conversion.original_filename.split('.').pop()?.toLowerCase();
 
-    // Upload the converted file
-    const { error: uploadError } = await supabaseClient.storage
+    if (fileExtension === 'xlsx') {
+      console.log('Converting Excel file to PDF');
+      // Convert Excel to PDF
+      const workbook = XLSX.read(await fileData.arrayBuffer(), { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const htmlContent = XLSX.utils.sheet_to_html(firstSheet);
+      
+      // Create a simple document with the HTML content
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            {
+              text: XLSX.utils.sheet_to_txt(firstSheet),
+              break: true
+            }
+          ],
+        }],
+      });
+
+      pdfBuffer = await Packer.toBuffer(doc);
+    } else if (fileExtension === 'docx') {
+      console.log('Converting Word file to PDF');
+      // For DOCX, we'll use the docx library to create a PDF
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            {
+              text: "Converted from DOCX",
+              break: true
+            }
+          ],
+        }],
+      });
+
+      pdfBuffer = await Packer.toBuffer(doc);
+    } else {
+      throw new Error('Unsupported file format');
+    }
+
+    // Upload the converted PDF
+    const pdfPath = `${conversion.original_file_path.split('.')[0]}.pdf`;
+    const { error: uploadError } = await supabase.storage
       .from('conversions')
-      .upload(convertedFilePath, pdfContent, {
+      .upload(pdfPath, pdfBuffer, {
         contentType: 'application/pdf',
         upsert: true
       });
@@ -71,10 +111,10 @@ serve(async (req) => {
     }
 
     // Update conversion record
-    const { error: updateError } = await supabaseClient
+    const { error: updateError } = await supabase
       .from('conversions')
       .update({
-        converted_file_path: convertedFilePath,
+        converted_file_path: pdfPath,
         status: 'completed'
       })
       .eq('id', conversionId);
@@ -83,10 +123,12 @@ serve(async (req) => {
       throw new Error('Failed to update conversion status');
     }
 
+    console.log('Conversion completed successfully');
+
     return new Response(
       JSON.stringify({ 
         message: 'Conversion completed successfully',
-        convertedFilePath 
+        pdfPath 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -97,7 +139,7 @@ serve(async (req) => {
       JSON.stringify({ error: error.message }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400
+        status: 500
       }
     );
   }

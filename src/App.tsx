@@ -21,7 +21,7 @@ const useAuthRedirect = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session && location.pathname === '/auth') {
         console.log("Redirecting authenticated user from /auth to /");
-        navigate('/');
+        navigate('/', { replace: true });
       }
     };
 
@@ -54,6 +54,8 @@ const usePaymentStatus = () => {
           return;
         }
 
+        toast.success('Payment successful! Starting conversion...');
+
         // Start conversion process
         const { error: conversionError } = await supabase.functions.invoke('process-conversion', {
           body: { conversionId }
@@ -65,7 +67,9 @@ const usePaymentStatus = () => {
           return;
         }
 
-        toast.success('Payment successful! Your conversion will begin shortly.');
+        // Clean up URL parameters
+        window.history.replaceState({}, '', window.location.pathname);
+        navigate('/', { replace: true });
       } catch (error) {
         console.error('Payment processing error:', error);
         toast.error('An error occurred while processing your payment.');
@@ -75,8 +79,6 @@ const usePaymentStatus = () => {
     if (paymentSuccess === 'true' && conversionId) {
       console.log("Payment successful, processing conversion");
       handleSuccessfulPayment(conversionId);
-      window.history.replaceState({}, '', window.location.pathname);
-      navigate('/', { replace: true });
     } else if (paymentCancelled === 'true') {
       console.log("Payment cancelled, showing error toast");
       toast.error('Payment was cancelled.');
