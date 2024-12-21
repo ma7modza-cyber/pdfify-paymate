@@ -46,7 +46,7 @@ export const initiatePayment = async ({ conversionId, onPaymentInitiated }: Paym
     console.log('Initiating payment for conversion:', conversionId);
     
     const { data, error } = await supabase.functions.invoke('create-checkout', {
-      body: { conversionId },
+      body: JSON.stringify({ conversionId }),
       headers: {
         Authorization: `Bearer ${session.access_token}`,
         'Content-Type': 'application/json'

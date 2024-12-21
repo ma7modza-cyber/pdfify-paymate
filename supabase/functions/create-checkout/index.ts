@@ -17,11 +17,18 @@ serve(async (req) => {
     // Parse request body with error handling
     let requestData;
     try {
-      requestData = await req.json();
+      const text = await req.text();
+      requestData = JSON.parse(text);
       console.log('Received request data:', requestData);
     } catch (parseError) {
       console.error('Failed to parse request JSON:', parseError);
-      throw new Error('Invalid JSON in request body');
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const { conversionId } = requestData;
