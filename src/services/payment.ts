@@ -48,7 +48,8 @@ export const initiatePayment = async ({ conversionId, onPaymentInitiated }: Paym
     const { data, error } = await supabase.functions.invoke('create-checkout', {
       body: { conversionId },
       headers: {
-        Authorization: `Bearer ${session.access_token}`
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
       }
     });
 
@@ -66,6 +67,8 @@ export const initiatePayment = async ({ conversionId, onPaymentInitiated }: Paym
 
     console.log('Payment URL received:', data.url);
     onPaymentInitiated?.();
+    
+    // Use window.location.href for the redirect
     window.location.href = data.url;
     
   } catch (error) {

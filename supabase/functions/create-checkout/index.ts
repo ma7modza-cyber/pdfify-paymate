@@ -53,13 +53,8 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
-    if (conversionError) {
+    if (conversionError || !conversion) {
       console.error('Conversion error:', conversionError);
-      throw new Error('Conversion not found');
-    }
-
-    if (!conversion) {
-      console.error('No conversion found for ID:', conversionId, 'and user:', user.id);
       throw new Error('Conversion not found');
     }
 
@@ -91,9 +86,11 @@ serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      console.error('PayPal token error response:', errorText);
-      console.error('PayPal token error status:', tokenResponse.status);
-      console.error('PayPal token error headers:', Object.fromEntries(tokenResponse.headers));
+      console.error('PayPal token error:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        body: errorText
+      });
       throw new Error(`PayPal authentication failed: ${errorText}`);
     }
 
@@ -108,7 +105,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${tokenData.access_token}`,
         'PayPal-Request-Id': crypto.randomUUID(),
-        'Prefer': 'return=representation',
+        'Prefer': 'return=representation'
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -159,7 +156,12 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({ url: approvalUrl }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json'
+        } 
+      }
     );
 
   } catch (error) {
