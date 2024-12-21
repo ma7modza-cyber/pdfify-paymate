@@ -7,8 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Use sandbox URLs for testing
-const PAYPAL_API_URL = 'https://api-m.sandbox.paypal.com';
+const PAYPAL_API_URL = 'https://api-m.paypal.com';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
