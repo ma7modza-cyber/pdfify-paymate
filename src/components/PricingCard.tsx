@@ -12,6 +12,11 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
   const { isLoading, handlePayment } = usePayment();
 
   const handlePaymentClick = async () => {
+    if (!conversionId) {
+      console.log('No conversion ID available for payment');
+      return;
+    }
+    console.log('Initiating payment for conversion:', conversionId);
     await handlePayment(conversionId);
     onPaymentInitiated?.();
   };
@@ -41,9 +46,9 @@ const PricingCard = ({ conversionId, onPaymentInitiated }: PricingCardProps) => 
       <Button 
         className="w-full bg-[#0070ba] hover:bg-[#003087]"
         onClick={handlePaymentClick}
-        disabled={isLoading}
+        disabled={isLoading || !conversionId}
       >
-        {isLoading ? "Processing..." : "Pay with PayPal"}
+        {isLoading ? "Processing..." : !conversionId ? "Upload a file first" : "Pay with PayPal"}
       </Button>
       
       <div className="mt-4 text-center text-sm text-gray-500">

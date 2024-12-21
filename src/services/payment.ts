@@ -9,12 +9,14 @@ export interface PaymentInitiateParams {
 export const initiatePayment = async ({ conversionId, onPaymentInitiated }: PaymentInitiateParams) => {
   try {
     if (!conversionId) {
+      console.error('No conversion ID provided');
       toast.error("Please upload a file first");
       return;
     }
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
+      console.error('No session found');
       toast.error("Please sign in to continue");
       return;
     }
@@ -29,7 +31,7 @@ export const initiatePayment = async ({ conversionId, onPaymentInitiated }: Paym
     });
 
     if (error) {
-      console.error('Payment error:', error);
+      console.error('Payment initialization error:', error);
       toast.error("Payment initialization failed. Please try again later.");
       return;
     }
