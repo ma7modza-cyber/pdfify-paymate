@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Use live PayPal API URL instead of sandbox
 const PAYPAL_API_URL = 'https://api-m.paypal.com';
 
 serve(async (req) => {
@@ -73,34 +72,34 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    const credentials = `${paypalClientId}:${paypalSecretKey}`;
-    const encodedCredentials = btoa(credentials);
+    // Log PayPal credentials length for debugging (don't log actual credentials)
+    console.log('PayPal Client ID length:', paypalClientId.length);
+    console.log('PayPal Secret Key length:', paypalSecretKey.length);
+
+    const credentials = btoa(`${paypalClientId}:${paypalSecretKey}`);
     
     console.log('Requesting PayPal access token...');
     
-    // Use live PayPal API URL for token
     const tokenResponse = await fetch(`${PAYPAL_API_URL}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${encodedCredentials}`,
+        'Authorization': `Basic ${credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
       },
       body: 'grant_type=client_credentials'
     });
 
-    const tokenData = await tokenResponse.json();
-
-    if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error('PayPal token error:', tokenData);
-      throw new Error('PayPal authentication failed');
+    if (!tokenResponse.ok) {
+      const tokenError = await tokenResponse.text();
+      console.error('PayPal token error response:', tokenError);
+      throw new Error(`PayPal authentication failed: ${tokenError}`);
     }
 
+    const tokenData = await tokenResponse.json();
     console.log('Successfully obtained PayPal access token');
 
     const origin = req.headers.get('origin') || 'http://localhost:8080';
     
-    // Use live PayPal API URL for creating order
     const orderResponse = await fetch(`${PAYPAL_API_URL}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
