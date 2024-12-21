@@ -6,8 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Use live PayPal API URL instead of sandbox
+const PAYPAL_API_URL = 'https://api-m.paypal.com';
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -20,14 +22,12 @@ serve(async (req) => {
       throw new Error('Conversion ID is required');
     }
 
-    // Get auth token from request header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       throw new Error('No authorization header');
     }
     const token = authHeader.replace('Bearer ', '');
 
-    // Initialize Supabase client with service role to bypass RLS
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -38,7 +38,6 @@ serve(async (req) => {
       }
     );
 
-    // Get user details
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
       console.error('User error:', userError);
@@ -47,7 +46,6 @@ serve(async (req) => {
 
     console.log('Found user:', user.id);
 
-    // Get conversion details using service role to bypass RLS
     const { data: conversion, error: conversionError } = await supabaseAdmin
       .from('conversions')
       .select('*')
@@ -67,7 +65,6 @@ serve(async (req) => {
 
     console.log('Found conversion:', conversion.id);
 
-    // Get PayPal credentials
     const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
     
@@ -76,14 +73,13 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    // Create Base64 encoded credentials for PayPal
     const credentials = `${paypalClientId}:${paypalSecretKey}`;
     const encodedCredentials = btoa(credentials);
     
     console.log('Requesting PayPal access token...');
     
-    // Get PayPal access token
-    const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
+    // Use live PayPal API URL for token
+    const tokenResponse = await fetch(`${PAYPAL_API_URL}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${encodedCredentials}`,
@@ -102,11 +98,10 @@ serve(async (req) => {
 
     console.log('Successfully obtained PayPal access token');
 
-    // Get the origin from the request, defaulting to localhost:8080 if not provided
     const origin = req.headers.get('origin') || 'http://localhost:8080';
     
-    // Create PayPal order
-    const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
+    // Use live PayPal API URL for creating order
+    const orderResponse = await fetch(`${PAYPAL_API_URL}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -139,7 +134,6 @@ serve(async (req) => {
       throw new Error('Failed to create PayPal order');
     }
 
-    // Update conversion record with PayPal order ID
     const { error: updateError } = await supabaseAdmin
       .from('conversions')
       .update({ 
@@ -154,7 +148,6 @@ serve(async (req) => {
       throw new Error('Failed to update conversion record');
     }
 
-    // Return the PayPal approval URL
     const approvalUrl = orderData.links.find((link: any) => link.rel === 'approve')?.href;
     if (!approvalUrl) {
       throw new Error('PayPal approval URL not found');
