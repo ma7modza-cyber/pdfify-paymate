@@ -27,33 +27,45 @@ serve(async (req) => {
     }
     const token = authHeader.replace('Bearer ', '');
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Missing Supabase configuration');
-    }
+    // Initialize Supabase client with service role to bypass RLS
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          persistSession: false,
+        }
+      }
+    );
 
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-
-    // Verify user and get conversion details
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    // Get user details
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
+      console.error('User error:', userError);
       throw new Error('User not found');
     }
 
-    // Get conversion details
-    const { data: conversion, error: conversionError } = await supabaseClient
+    console.log('Found user:', user.id);
+
+    // Get conversion details using service role to bypass RLS
+    const { data: conversion, error: conversionError } = await supabaseAdmin
       .from('conversions')
       .select('*')
       .eq('id', conversionId)
       .eq('user_id', user.id)
       .single();
 
-    if (conversionError || !conversion) {
+    if (conversionError) {
+      console.error('Conversion error:', conversionError);
       throw new Error('Conversion not found');
     }
+
+    if (!conversion) {
+      console.error('No conversion found for ID:', conversionId, 'and user:', user.id);
+      throw new Error('Conversion not found');
+    }
+
+    console.log('Found conversion:', conversion.id);
 
     // Get PayPal credentials
     const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
@@ -106,7 +118,7 @@ serve(async (req) => {
         purchase_units: [{
           amount: {
             currency_code: 'USD',
-            value: '1.99'
+            value: conversion.amount.toString()
           },
           description: 'PDF Conversion Service',
           reference_id: conversionId
@@ -128,7 +140,7 @@ serve(async (req) => {
     }
 
     // Update conversion record with PayPal order ID
-    const { error: updateError } = await supabaseClient
+    const { error: updateError } = await supabaseAdmin
       .from('conversions')
       .update({ 
         payment_intent_id: orderData.id,
@@ -138,6 +150,7 @@ serve(async (req) => {
       .eq('user_id', user.id);
 
     if (updateError) {
+      console.error('Update error:', updateError);
       throw new Error('Failed to update conversion record');
     }
 
