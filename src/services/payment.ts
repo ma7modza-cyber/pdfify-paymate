@@ -21,6 +21,21 @@ export const initiatePayment = async ({ conversionId, onPaymentInitiated }: Paym
       return;
     }
 
+    // First, verify the conversion exists
+    const { data: conversion, error: conversionError } = await supabase
+      .from('conversions')
+      .select('*')
+      .eq('id', conversionId)
+      .single();
+
+    if (conversionError || !conversion) {
+      console.error('Failed to fetch conversion:', conversionError);
+      console.log('Conversion ID being checked:', conversionId);
+      toast.error("Invalid conversion record");
+      return;
+    }
+
+    console.log('Found conversion record:', conversion);
     console.log('Initiating payment for conversion:', conversionId);
     
     const { data, error } = await supabase.functions.invoke('create-checkout', {
