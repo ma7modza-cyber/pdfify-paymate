@@ -7,7 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const PAYPAL_API_URL = 'https://api-m.paypal.com';
+// Use sandbox URLs for testing
+const PAYPAL_API_URL = 'https://api-m.sandbox.paypal.com';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -73,12 +74,6 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    // Log credentials format (not the actual values)
-    console.log('PayPal Client ID format check:', 
-      `Length: ${paypalClientId.length}, ` +
-      `Starts with: ${paypalClientId.substring(0, 3)}...`
-    );
-
     // Create credentials string and encode it properly
     const credentialsString = `${paypalClientId}:${paypalSecretKey}`;
     const encodedCredentials = base64Encode(new TextEncoder().encode(credentialsString));
@@ -114,6 +109,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${tokenData.access_token}`,
         'PayPal-Request-Id': crypto.randomUUID(),
+        'Prefer': 'return=representation',
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
