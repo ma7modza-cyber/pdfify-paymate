@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,27 +73,34 @@ serve(async (req) => {
       throw new Error('PayPal credentials not configured');
     }
 
-    // Log PayPal credentials length for debugging (don't log actual credentials)
-    console.log('PayPal Client ID length:', paypalClientId.length);
-    console.log('PayPal Secret Key length:', paypalSecretKey.length);
+    // Log credentials format (not the actual values)
+    console.log('PayPal Client ID format check:', 
+      `Length: ${paypalClientId.length}, ` +
+      `Starts with: ${paypalClientId.substring(0, 3)}...`
+    );
 
-    const credentials = btoa(`${paypalClientId}:${paypalSecretKey}`);
+    // Create credentials string and encode it properly
+    const credentialsString = `${paypalClientId}:${paypalSecretKey}`;
+    const encodedCredentials = base64Encode(new TextEncoder().encode(credentialsString));
     
     console.log('Requesting PayPal access token...');
     
     const tokenResponse = await fetch(`${PAYPAL_API_URL}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${credentials}`,
+        'Authorization': `Basic ${encodedCredentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
       body: 'grant_type=client_credentials'
     });
 
     if (!tokenResponse.ok) {
-      const tokenError = await tokenResponse.text();
-      console.error('PayPal token error response:', tokenError);
-      throw new Error(`PayPal authentication failed: ${tokenError}`);
+      const errorText = await tokenResponse.text();
+      console.error('PayPal token error response:', errorText);
+      console.error('PayPal token error status:', tokenResponse.status);
+      console.error('PayPal token error headers:', Object.fromEntries(tokenResponse.headers));
+      throw new Error(`PayPal authentication failed: ${errorText}`);
     }
 
     const tokenData = await tokenResponse.json();
