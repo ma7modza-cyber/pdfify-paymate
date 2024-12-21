@@ -7,15 +7,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const PAYPAL_API_URL = 'https://api-m.paypal.com';
-
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { conversionId } = await req.json();
+    // Parse request body with error handling
+    let requestData;
+    try {
+      requestData = await req.json();
+      console.log('Received request data:', requestData);
+    } catch (parseError) {
+      console.error('Failed to parse request JSON:', parseError);
+      throw new Error('Invalid JSON in request body');
+    }
+
+    const { conversionId } = requestData;
     console.log('Processing checkout for conversion:', conversionId);
 
     if (!conversionId) {
@@ -58,7 +67,7 @@ serve(async (req) => {
       throw new Error('Conversion not found');
     }
 
-    console.log('Found conversion:', conversion.id);
+    console.log('Found conversion:', conversion);
 
     const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
@@ -74,12 +83,11 @@ serve(async (req) => {
     
     console.log('Requesting PayPal access token...');
     
-    const tokenResponse = await fetch(`${PAYPAL_API_URL}/v1/oauth2/token`, {
+    const tokenResponse = await fetch('https://api-m.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${encodedCredentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
       },
       body: 'grant_type=client_credentials'
     });
@@ -99,7 +107,7 @@ serve(async (req) => {
 
     const origin = req.headers.get('origin') || 'http://localhost:8080';
     
-    const orderResponse = await fetch(`${PAYPAL_API_URL}/v2/checkout/orders`, {
+    const orderResponse = await fetch('https://api-m.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
