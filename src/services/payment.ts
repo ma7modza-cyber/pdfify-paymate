@@ -21,17 +21,24 @@ export const initiatePayment = async ({ conversionId, onPaymentInitiated }: Paym
       return;
     }
 
-    // First, verify the conversion exists
+    // First, verify the conversion exists and belongs to the user
     const { data: conversion, error: conversionError } = await supabase
       .from('conversions')
       .select('*')
       .eq('id', conversionId)
+      .eq('user_id', session.user.id)
       .single();
 
     if (conversionError || !conversion) {
       console.error('Failed to fetch conversion:', conversionError);
       console.log('Conversion ID being checked:', conversionId);
       toast.error("Invalid conversion record");
+      return;
+    }
+
+    if (conversion.payment_status === 'paid') {
+      console.log('Conversion already paid for');
+      toast.error("This conversion has already been paid for");
       return;
     }
 

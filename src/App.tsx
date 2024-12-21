@@ -42,11 +42,34 @@ const usePaymentStatus = () => {
       try {
         console.log("Processing conversion after successful payment:", conversionId);
         
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          console.error('No session found');
+          toast.error("Authentication required");
+          return;
+        }
+
+        // Verify the conversion exists and belongs to the user
+        const { data: conversion, error: conversionError } = await supabase
+          .from('conversions')
+          .select('*')
+          .eq('id', conversionId)
+          .single();
+
+        if (conversionError || !conversion) {
+          console.error('Failed to fetch conversion:', conversionError);
+          toast.error('Invalid conversion record');
+          return;
+        }
+
+        console.log("Found conversion record:", conversion);
+        
         // Update payment status
         const { error: updateError } = await supabase
           .from('conversions')
           .update({ payment_status: 'paid' })
-          .eq('id', conversionId);
+          .eq('id', conversionId)
+          .eq('user_id', session.user.id);
 
         if (updateError) {
           console.error('Failed to update payment status:', updateError);
@@ -57,12 +80,15 @@ const usePaymentStatus = () => {
         toast.success('Payment successful! Starting conversion...');
 
         // Start conversion process
-        const { error: conversionError } = await supabase.functions.invoke('process-conversion', {
-          body: { conversionId }
+        const { error: conversionProcessError } = await supabase.functions.invoke('process-conversion', {
+          body: { conversionId },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
         });
 
-        if (conversionError) {
-          console.error('Conversion error:', conversionError);
+        if (conversionProcessError) {
+          console.error('Conversion process error:', conversionProcessError);
           toast.error('Failed to start conversion. Please try again.');
           return;
         }
