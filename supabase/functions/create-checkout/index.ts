@@ -21,80 +21,93 @@ interface PayPalOrderResponse {
 }
 
 const getPayPalAccessToken = async (clientId: string, secretKey: string): Promise<string> => {
-  console.log('Requesting PayPal access token...');
+  console.log('Starting PayPal authentication process...');
   
-  const credentials = btoa(`${clientId}:${secretKey}`);
-  const response = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Accept-Language': 'en_US',
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      'grant_type': 'client_credentials'
-    }).toString()
-  });
+  const auth = btoa(`${clientId}:${secretKey}`);
+  console.log('Using PayPal sandbox environment');
+  
+  try {
+    const response = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials'
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('PayPal token error:', errorText);
-    throw new Error(`PayPal authentication failed: ${errorText}`);
+    const responseText = await response.text();
+    console.log('PayPal auth response status:', response.status);
+    console.log('PayPal auth response:', responseText);
+
+    if (!response.ok) {
+      throw new Error(`PayPal authentication failed: ${responseText}`);
+    }
+
+    const data = JSON.parse(responseText) as PayPalTokenResponse;
+    console.log('Successfully obtained PayPal access token');
+    return data.access_token;
+  } catch (error) {
+    console.error('PayPal authentication error:', error);
+    throw error;
   }
-
-  const data = await response.json() as PayPalTokenResponse;
-  console.log('Successfully obtained PayPal access token');
-  return data.access_token;
 };
 
 const createPayPalOrder = async (accessToken: string, conversionId: string, origin: string): Promise<string> => {
   console.log('Creating PayPal order...');
   
-  const response = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-      'PayPal-Request-Id': crypto.randomUUID(),
-    },
-    body: JSON.stringify({
-      intent: 'CAPTURE',
-      purchase_units: [{
-        amount: {
-          currency_code: 'USD',
-          value: '1.99'
-        },
-        description: 'PDF Conversion Service',
-        reference_id: conversionId
-      }],
-      application_context: {
-        return_url: `${origin}/?payment_success=true&conversion_id=${conversionId}`,
-        cancel_url: `${origin}/?payment_cancelled=true`,
-        user_action: 'PAY_NOW',
-        brand_name: 'PDF Converter'
-      }
-    })
-  });
+  try {
+    const response = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'PayPal-Request-Id': crypto.randomUUID(),
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [{
+          amount: {
+            currency_code: 'USD',
+            value: '1.99'
+          },
+          description: 'PDF Conversion Service',
+          reference_id: conversionId
+        }],
+        application_context: {
+          return_url: `${origin}/?payment_success=true&conversion_id=${conversionId}`,
+          cancel_url: `${origin}/?payment_cancelled=true`,
+          user_action: 'PAY_NOW',
+          brand_name: 'PDF Converter'
+        }
+      })
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error('PayPal order error:', errorData);
-    throw new Error('Failed to create PayPal order');
+    const responseText = await response.text();
+    console.log('PayPal order creation response:', responseText);
+
+    if (!response.ok) {
+      throw new Error(`Failed to create PayPal order: ${responseText}`);
+    }
+
+    const orderData = JSON.parse(responseText) as PayPalOrderResponse;
+    const approvalUrl = orderData.links.find(link => link.rel === 'approve')?.href;
+    
+    if (!approvalUrl) {
+      throw new Error('PayPal approval URL not found in response');
+    }
+
+    console.log('Successfully created PayPal order:', orderData.id);
+    return approvalUrl;
+  } catch (error) {
+    console.error('PayPal order creation error:', error);
+    throw error;
   }
-
-  const orderData = await response.json() as PayPalOrderResponse;
-  const approvalUrl = orderData.links.find(link => link.rel === 'approve')?.href;
-  
-  if (!approvalUrl) {
-    throw new Error('PayPal approval URL not found');
-  }
-
-  console.log('Successfully created PayPal order:', orderData.id);
-  return approvalUrl;
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -114,6 +127,9 @@ serve(async (req) => {
       console.error('Missing PayPal credentials');
       throw new Error('PayPal credentials not configured');
     }
+
+    console.log('PayPal Client ID length:', paypalClientId.length);
+    console.log('PayPal Secret Key length:', paypalSecretKey.length);
 
     const accessToken = await getPayPalAccessToken(paypalClientId, paypalSecretKey);
     const approvalUrl = await createPayPalOrder(accessToken, conversionId, req.headers.get('origin') || '');
