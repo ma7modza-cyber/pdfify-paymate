@@ -14,80 +14,25 @@ serve(async (req) => {
   }
 
   try {
-    // Parse request body with error handling
-    let requestData;
-    try {
-      requestData = await req.json();
-      console.log('Received request data:', requestData);
-    } catch (parseError) {
-      console.error('Failed to parse request JSON:', parseError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body' }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    const { conversionId } = requestData;
+    // Parse request body
+    const { conversionId } = await req.json();
     console.log('Processing checkout for conversion:', conversionId);
 
     if (!conversionId) {
       throw new Error('Conversion ID is required');
     }
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
-    const token = authHeader.replace('Bearer ', '');
-
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          persistSession: false,
-        }
-      }
-    );
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      console.error('User error:', userError);
-      throw new Error('User not found');
-    }
-
-    console.log('Found user:', user.id);
-
-    const { data: conversion, error: conversionError } = await supabaseAdmin
-      .from('conversions')
-      .select('*')
-      .eq('id', conversionId)
-      .eq('user_id', user.id)
-      .single();
-
-    if (conversionError || !conversion) {
-      console.error('Conversion error:', conversionError);
-      throw new Error('Conversion not found');
-    }
-
-    console.log('Found conversion:', conversion);
-
+    // Get PayPal credentials from environment variables
     const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
     
     if (!paypalClientId || !paypalSecretKey) {
-      console.error('PayPal credentials missing');
       throw new Error('PayPal credentials not configured');
     }
 
-    // Create credentials string and encode it properly
+    // Get PayPal access token
     const credentialsString = `${paypalClientId}:${paypalSecretKey}`;
     const encodedCredentials = base64Encode(new TextEncoder().encode(credentialsString));
-    
-    console.log('Requesting PayPal access token...');
     
     const tokenResponse = await fetch('https://api-m.paypal.com/v1/oauth2/token', {
       method: 'POST',
@@ -100,19 +45,13 @@ serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      console.error('PayPal token error:', {
-        status: tokenResponse.status,
-        statusText: tokenResponse.statusText,
-        body: errorText
-      });
       throw new Error(`PayPal authentication failed: ${errorText}`);
     }
 
     const tokenData = await tokenResponse.json();
     console.log('Successfully obtained PayPal access token');
 
-    const origin = req.headers.get('origin') || 'http://localhost:8080';
-    
+    // Create PayPal order
     const orderResponse = await fetch('https://api-m.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
@@ -132,8 +71,8 @@ serve(async (req) => {
           reference_id: conversionId
         }],
         application_context: {
-          return_url: `${origin}/?payment_success=true&conversion_id=${conversionId}`,
-          cancel_url: `${origin}/?payment_cancelled=true`,
+          return_url: `${req.headers.get('origin')}/?payment_success=true&conversion_id=${conversionId}`,
+          cancel_url: `${req.headers.get('origin')}/?payment_cancelled=true`,
           user_action: 'PAY_NOW',
           brand_name: 'PDF Converter'
         }
