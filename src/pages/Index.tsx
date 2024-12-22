@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import FileUploader from '@/components/FileUploader';
@@ -6,11 +6,48 @@ import PricingCard from '@/components/PricingCard';
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { Download, Loader2 } from "lucide-react";
 
 const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [conversionId, setConversionId] = useState<string | null>(null);
+  const [conversionStatus, setConversionStatus] = useState<string>('pending');
+  const [convertedFilePath, setConvertedFilePath] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Poll for conversion status
+  useEffect(() => {
+    if (!conversionId) return;
+
+    const checkStatus = async () => {
+      const { data: conversion, error } = await supabase
+        .from('conversions')
+        .select('*')
+        .eq('id', conversionId)
+        .single();
+
+      if (error) {
+        console.error('Error checking conversion status:', error);
+        return;
+      }
+
+      if (conversion) {
+        setConversionStatus(conversion.status);
+        setConvertedFilePath(conversion.converted_file_path);
+        
+        if (conversion.status === 'completed') {
+          setIsProcessing(false);
+          toast.success('Your file has been converted successfully!');
+        } else if (conversion.status === 'error') {
+          setIsProcessing(false);
+          toast.error('Conversion failed. Please try again.');
+        }
+      }
+    };
+
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
+  }, [conversionId]);
 
   const handleConversion = async (file: File) => {
     setIsProcessing(true);
@@ -53,8 +90,36 @@ const Index = () => {
     } catch (error) {
       console.error('Conversion error:', error);
       toast.error("Error uploading file");
-    } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!convertedFilePath) return;
+    
+    try {
+      const { data, error } = await supabase.storage
+        .from('conversions')
+        .download(convertedFilePath);
+
+      if (error) {
+        throw error;
+      }
+
+      // Create a download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = convertedFilePath.split('/').pop() || 'converted.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Download started!');
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Failed to download file');
     }
   };
 
@@ -87,6 +152,23 @@ const Index = () => {
               onFileSelect={handleConversion}
               isProcessing={isProcessing}
             />
+            {conversionStatus === 'completed' && convertedFilePath && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  onClick={handleDownload}
+                  className="bg-green-500 hover:bg-green-600"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Converted PDF
+                </Button>
+              </div>
+            )}
+            {isProcessing && (
+              <div className="mt-4 flex items-center justify-center text-blue-600">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <span>Converting your file...</span>
+              </div>
+            )}
           </Card>
 
           <PricingCard 
