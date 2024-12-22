@@ -8,13 +8,11 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Parse request body
     const { conversionId } = await req.json();
     console.log('Processing checkout for conversion:', conversionId);
 
@@ -22,22 +20,23 @@ serve(async (req) => {
       throw new Error('Conversion ID is required');
     }
 
-    // Get PayPal credentials from environment variables
+    // Get PayPal credentials
     const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
     const paypalSecretKey = Deno.env.get('PAYPAL_SECRET_KEY');
     
     if (!paypalClientId || !paypalSecretKey) {
+      console.error('Missing PayPal credentials');
       throw new Error('PayPal credentials not configured');
     }
 
-    // Get PayPal access token
-    const credentialsString = `${paypalClientId}:${paypalSecretKey}`;
-    const encodedCredentials = base64Encode(new TextEncoder().encode(credentialsString));
-    
-    const tokenResponse = await fetch('https://api-m.paypal.com/v1/oauth2/token', {
+    // Get PayPal access token using Basic Auth
+    const credentials = btoa(`${paypalClientId}:${paypalSecretKey}`);
+    console.log('Requesting PayPal access token...');
+
+    const tokenResponse = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${encodedCredentials}`,
+        'Authorization': `Basic ${credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: 'grant_type=client_credentials'
@@ -45,6 +44,7 @@ serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
+      console.error('PayPal token error:', errorText);
       throw new Error(`PayPal authentication failed: ${errorText}`);
     }
 
@@ -52,13 +52,12 @@ serve(async (req) => {
     console.log('Successfully obtained PayPal access token');
 
     // Create PayPal order
-    const orderResponse = await fetch('https://api-m.paypal.com/v2/checkout/orders', {
+    const orderResponse = await fetch('https://api-m.sandbox.paypal.com/v2/checkout/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${tokenData.access_token}`,
         'PayPal-Request-Id': crypto.randomUUID(),
-        'Prefer': 'return=representation'
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
