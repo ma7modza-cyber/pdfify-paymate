@@ -17,8 +17,7 @@ serve(async (req) => {
     // Parse request body with error handling
     let requestData;
     try {
-      const text = await req.text();
-      requestData = JSON.parse(text);
+      requestData = await req.json();
       console.log('Received request data:', requestData);
     } catch (parseError) {
       console.error('Failed to parse request JSON:', parseError);
@@ -127,7 +126,7 @@ serve(async (req) => {
         purchase_units: [{
           amount: {
             currency_code: 'USD',
-            value: conversion.amount.toString()
+            value: '1.99'
           },
           description: 'PDF Conversion Service',
           reference_id: conversionId
@@ -146,20 +145,6 @@ serve(async (req) => {
     if (!orderResponse.ok) {
       console.error('PayPal order error:', orderData);
       throw new Error('Failed to create PayPal order');
-    }
-
-    const { error: updateError } = await supabaseAdmin
-      .from('conversions')
-      .update({ 
-        payment_intent_id: orderData.id,
-        payment_status: 'pending'
-      })
-      .eq('id', conversionId)
-      .eq('user_id', user.id);
-
-    if (updateError) {
-      console.error('Update error:', updateError);
-      throw new Error('Failed to update conversion record');
     }
 
     const approvalUrl = orderData.links.find((link: any) => link.rel === 'approve')?.href;
