@@ -11,37 +11,43 @@ export type Database = {
     Tables: {
       conversions: {
         Row: {
-          created_at: string | null
+          amount: number
+          converted_file_path: string | null
+          created_at: string
           id: string
-          original_file_url: string
+          original_file_path: string
           original_filename: string
-          payment_id: string | null
-          payment_status: Database["public"]["Enums"]["payment_status"] | null
-          pdf_url: string | null
-          status: Database["public"]["Enums"]["conversion_status"] | null
-          user_id: string
+          payment_intent_id: string | null
+          payment_status: string
+          status: string
+          updated_at: string
+          user_id: string | null
         }
         Insert: {
-          created_at?: string | null
+          amount?: number
+          converted_file_path?: string | null
+          created_at?: string
           id?: string
-          original_file_url: string
+          original_file_path: string
           original_filename: string
-          payment_id?: string | null
-          payment_status?: Database["public"]["Enums"]["payment_status"] | null
-          pdf_url?: string | null
-          status?: Database["public"]["Enums"]["conversion_status"] | null
-          user_id: string
+          payment_intent_id?: string | null
+          payment_status?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
         }
         Update: {
-          created_at?: string | null
+          amount?: number
+          converted_file_path?: string | null
+          created_at?: string
           id?: string
-          original_file_url?: string
+          original_file_path?: string
           original_filename?: string
-          payment_id?: string | null
-          payment_status?: Database["public"]["Enums"]["payment_status"] | null
-          pdf_url?: string | null
-          status?: Database["public"]["Enums"]["conversion_status"] | null
-          user_id?: string
+          payment_intent_id?: string | null
+          payment_status?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -53,8 +59,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      conversion_status: "pending" | "processing" | "completed" | "failed"
-      payment_status: "pending" | "completed" | "failed"
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
