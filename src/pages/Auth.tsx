@@ -3,6 +3,7 @@ import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -10,8 +11,25 @@ const AuthPage = () => {
   useEffect(() => {
     // Check if user is already logged in
     supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth state changed:", event);
       if (session) {
         navigate("/");
+      }
+      
+      // Handle various auth events
+      switch (event) {
+        case 'SIGNED_IN':
+          toast.success('Successfully signed in!');
+          break;
+        case 'SIGNED_OUT':
+          toast.success('Successfully signed out!');
+          break;
+        case 'USER_DELETED':
+          toast.error('Account deleted');
+          break;
+        case 'PASSWORD_RECOVERY':
+          toast.info('Password recovery email sent');
+          break;
       }
     });
   }, [navigate]);
@@ -24,11 +42,21 @@ const AuthPage = () => {
         </h1>
         <Auth
           supabaseClient={supabase}
-          appearance={{ theme: ThemeSupa }}
-          theme="light"
+          appearance={{ 
+            theme: ThemeSupa,
+            variables: {
+              default: {
+                colors: {
+                  brand: '#2563eb',
+                  brandAccent: '#1d4ed8',
+                }
+              }
+            }
+          }}
           providers={[]}
           view="sign_up"
           showLinks={true}
+          redirectTo={`${window.location.origin}/`}
         />
       </div>
     </div>
