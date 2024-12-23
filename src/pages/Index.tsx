@@ -58,6 +58,34 @@ const Index = () => {
         return;
       }
 
+      // Create bucket if it doesn't exist
+      const { data: buckets, error: bucketsError } = await supabase
+        .storage
+        .listBuckets();
+
+      const conversionsBucket = buckets?.find(b => b.name === 'conversions');
+      
+      if (!conversionsBucket) {
+        console.log("Creating conversions bucket");
+        const { error: createBucketError } = await supabase
+          .storage
+          .createBucket('conversions', {
+            public: false,
+            fileSizeLimit: 52428800, // 50MB
+            allowedMimeTypes: [
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ]
+          });
+
+        if (createBucketError) {
+          console.error('Error creating bucket:', createBucketError);
+          toast.error("Failed to initialize storage");
+          setIsProcessing(false);
+          return;
+        }
+      }
+
       // Upload file to Supabase Storage
       const fileExt = file.name.split('.').pop();
       const filePath = `${session.user.id}/${crypto.randomUUID()}.${fileExt}`;
@@ -123,20 +151,9 @@ const Index = () => {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <div className="container mx-auto px-4 py-12">
-        <div className="flex justify-end mb-8">
-          <Button variant="outline" onClick={handleLogout}>
-            Sign Out
-          </Button>
-        </div>
-        
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-blue-900 mb-4">
             Convert Excel & Word to PDF
