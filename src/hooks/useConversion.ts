@@ -17,8 +17,8 @@ export const useConversion = () => {
         return;
       }
 
-      // Create bucket if it doesn't exist
-      const { data: buckets, error: bucketsError } = await supabase
+      // First check if bucket exists
+      const { data: buckets } = await supabase
         .storage
         .listBuckets();
 
@@ -26,10 +26,11 @@ export const useConversion = () => {
       
       if (!conversionsBucket) {
         console.log("Creating conversions bucket");
+        // Create bucket with public access
         const { error: createBucketError } = await supabase
           .storage
-          .createBucket('conversions', {
-            public: false,
+          .createBucket('conversions', { 
+            public: true, // Make bucket public
             fileSizeLimit: 52428800, // 50MB
             allowedMimeTypes: [
               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
